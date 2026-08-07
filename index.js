@@ -20,13 +20,10 @@ function getReadingStatus(minTempC, maxTempC) {
 
   // A reading is an excursion if either limit is outside the safe range.
   if (minTempC < 2 || maxTempC > 8) {
-    return 'excursion';
+    return 'Excursion Risk';
   }
 
-  return 'ok';
+  return 'Ok';
 }
 
 module.exports = { getReadingStatus };
-
-console.log(getReadingStatus(3, 7));
-console.log(getReadingStatus(1.9, 7));
