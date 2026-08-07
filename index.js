@@ -27,6 +27,3 @@ function getReadingStatus(minTempC, maxTempC) {
 }
 
 module.exports = { getReadingStatus };
-
-console.log(getReadingStatus(3, 7));
-console.log(getReadingStatus(1.9, 7));
