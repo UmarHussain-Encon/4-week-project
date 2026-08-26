@@ -1,1 +1,19 @@
-node_modules/
+# Terraform working folders
+**/.terraform/
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+
+# Terraform plans
+*.tfplan
+
+# Generated Lambda packages
+*.zip
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# macOS
+.DS_Store
