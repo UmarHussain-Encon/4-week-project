@@ -3,27 +3,17 @@
 # ======================================================
 
 data "aws_iam_policy_document" "lambda_trust" {
-
   statement {
-
-    effect =
-      "Allow"
-
+    effect = "Allow"
 
     actions = [
-
       "sts:AssumeRole"
     ]
 
-
     principals {
-
-      type =
-        "Service"
-
+      type = "Service"
 
       identifiers = [
-
         "lambda.amazonaws.com"
       ]
     }
@@ -32,101 +22,64 @@ data "aws_iam_policy_document" "lambda_trust" {
 
 
 # ======================================================
-# MAIN LINK DYNAMODB LAMBDA ROLE
+# MAIN LAMBDA ROLE
 # ======================================================
 
 resource "aws_iam_role" "link_dynamodb" {
-
-  name =
-    var.link_dynamodb_role_name
-
-
-  assume_role_policy =
-    data.aws_iam_policy_document
-      .lambda_trust
-      .json
+  name               = var.link_dynamodb_role_name
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
 }
 
 
 resource "aws_iam_role_policy_attachment" "link_dynamodb_logs" {
-
-  role =
-    aws_iam_role
-      .link_dynamodb
-      .name
-
-
-  policy_arn =
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  role       = aws_iam_role.link_dynamodb.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 
 resource "aws_iam_role_policy" "link_dynamodb_access" {
+  name = "umar-coldchain-LinkDynamoDB-access-terraform"
+  role = aws_iam_role.link_dynamodb.id
 
-  name =
-    "umar-coldchain-LinkDynamoDB-access-terraform"
+  policy = jsonencode({
+    Version = "2012-10-17"
 
+    Statement = [
+      {
+        Effect = "Allow"
 
-  role =
-    aws_iam_role
-      .link_dynamodb
-      .id
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem"
+        ]
 
+        Resource = aws_dynamodb_table.readings_by_id.arn
+      },
+      {
+        Effect = "Allow"
 
-  policy =
-    jsonencode({
+        Action = [
+          "dynamodb:Query"
+        ]
 
-      Version =
-        "2012-10-17"
+        Resource = [
+          aws_dynamodb_table.readings_by_id.arn,
+          "${aws_dynamodb_table.readings_by_id.arn}/index/*"
+        ]
+      },
+      {
+        Effect = "Allow"
 
+        Action = [
+          "sns:Publish"
+        ]
 
-      Statement = [
-
-        {
-
-          Effect =
-            "Allow"
-
-
-          Action = [
-
-            "dynamodb:PutItem",
-
-            "dynamodb:GetItem",
-
-            "dynamodb:Query",
-
-            "dynamodb:UpdateItem",
-
-            "dynamodb:DeleteItem"
-          ]
-
-
-          Resource =
-            aws_dynamodb_table
-              .readings
-              .arn
-        },
-
-        {
-
-          Effect =
-            "Allow"
-
-
-          Action = [
-
-            "sns:Publish"
-          ]
-
-
-          Resource =
-            aws_sns_topic
-              .excursions
-              .arn
-        }
-      ]
-    })
+        Resource = aws_sns_topic.excursions.arn
+      }
+    ]
+  })
 }
 
 
@@ -135,93 +88,46 @@ resource "aws_iam_role_policy" "link_dynamodb_access" {
 # ======================================================
 
 resource "aws_iam_role" "excursion_handler" {
-
-  name =
-    var.excursion_handler_role_name
-
-
-  assume_role_policy =
-    data.aws_iam_policy_document
-      .lambda_trust
-      .json
+  name               = var.excursion_handler_role_name
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
 }
 
 
 resource "aws_iam_role_policy_attachment" "excursion_handler_logs" {
-
-  role =
-    aws_iam_role
-      .excursion_handler
-      .name
-
-
-  policy_arn =
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  role       = aws_iam_role.excursion_handler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 
 resource "aws_iam_role_policy" "excursion_handler_access" {
+  name = "umar-coldchain-excursion-handler-access-terraform"
+  role = aws_iam_role.excursion_handler.id
 
-  name =
-    "umar-coldchain-excursion-handler-access-terraform"
+  policy = jsonencode({
+    Version = "2012-10-17"
 
+    Statement = [
+      {
+        Effect = "Allow"
 
-  role =
-    aws_iam_role
-      .excursion_handler
-      .id
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
 
+        Resource = aws_sqs_queue.alert_queue.arn
+      },
+      {
+        Effect = "Allow"
 
-  policy =
-    jsonencode({
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem"
+        ]
 
-      Version =
-        "2012-10-17"
-
-
-      Statement = [
-
-        {
-
-          Effect =
-            "Allow"
-
-
-          Action = [
-
-            "sqs:ReceiveMessage",
-
-            "sqs:DeleteMessage",
-
-            "sqs:GetQueueAttributes"
-          ]
-
-
-          Resource =
-            aws_sqs_queue
-              .alert_queue
-              .arn
-        },
-
-        {
-
-          Effect =
-            "Allow"
-
-
-          Action = [
-
-            "dynamodb:GetItem",
-
-            "dynamodb:UpdateItem"
-          ]
-
-
-          Resource =
-            aws_dynamodb_table
-              .readings
-              .arn
-        }
-      ]
-    })
+        Resource = aws_dynamodb_table.readings_by_id.arn
+      }
+    ]
+  })
 }

@@ -1,16 +1,19 @@
-import { randomUUID } from "node:crypto";
-
 import {
-  findReadingByTimestamp,
+  deleteReadingFromDatabase,
+  findReadingById,
+  publishExcursion,
   queryBranchReadings,
   saveReading,
-  publishExcursion
+  updateReading
 } from "../repositories/readingsRepositories.mjs";
 
 
 export class AppError extends Error {
 
-  constructor(statusCode, message) {
+  constructor(
+    statusCode,
+    message
+  ) {
 
     super(message);
 
@@ -20,6 +23,64 @@ export class AppError extends Error {
     this.statusCode =
       statusCode;
   }
+}
+
+
+// ======================================================
+// VALIDATE BODY
+// ======================================================
+
+function validateBodyObject(body) {
+
+  if (
+    body === null ||
+    typeof body !== "object" ||
+    Array.isArray(body)
+  ) {
+
+    throw new AppError(
+      400,
+      "Request body must be a JSON object"
+    );
+  }
+}
+
+
+// ======================================================
+// UUID VERSION 1 VALIDATION
+// ======================================================
+
+function normaliseUuidV1(value) {
+
+  if (
+    typeof value !== "string"
+  ) {
+
+    return null;
+  }
+
+
+  const readingId =
+    value
+      .trim()
+      .toLowerCase();
+
+
+  const uuidV1Pattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+
+  if (
+    !uuidV1Pattern.test(
+      readingId
+    )
+  ) {
+
+    return null;
+  }
+
+
+  return readingId;
 }
 
 
@@ -56,6 +117,7 @@ function normaliseDate(value) {
   if (
     Number.isNaN(timestamp)
   ) {
+
     return null;
   }
 
@@ -67,7 +129,7 @@ function normaliseDate(value) {
 
 
 // ======================================================
-// TEMPERATURE BUSINESS RULE
+// STATUS BUSINESS RULE
 // ======================================================
 
 function getReadingStatus(
@@ -119,8 +181,12 @@ export async function getBranchReadings({
   }
 
 
-  let normalisedFrom = null;
-  let normalisedTo = null;
+  let normalisedFrom =
+    null;
+
+
+  let normalisedTo =
+    null;
 
 
   if (from) {
@@ -181,43 +247,36 @@ export async function getBranchReadings({
 // GET ONE READING
 // ======================================================
 
-export async function getReadingByTimestamp(
+export async function getReadingById(
   branchId,
-  recordedAtValue
+  readingIdValue
 ) {
 
-  if (!branchId) {
-
-    throw new AppError(
-      400,
-      "branchId is required"
-    );
-  }
-
-
-  const recordedAt =
-    normaliseDate(
-      recordedAtValue
+  const readingId =
+    normaliseUuidV1(
+      readingIdValue
     );
 
 
-  if (!recordedAt) {
+  if (!readingId) {
 
     throw new AppError(
       400,
-      "recordedAt must be a valid date"
+      "readingId must be a valid UUIDv1"
     );
   }
 
 
   const reading =
-    await findReadingByTimestamp(
-      branchId,
-      recordedAt
+    await findReadingById(
+      readingId
     );
 
 
-  if (!reading) {
+  if (
+    !reading ||
+    reading.branchId !== branchId
+  ) {
 
     throw new AppError(
       404,
@@ -239,16 +298,11 @@ export async function createReading(
   body
 ) {
 
-  if (!branchId) {
-
-    throw new AppError(
-      400,
-      "branchId is required"
-    );
-  }
+  validateBodyObject(body);
 
 
   const requiredFields = [
+    "readingId",
     "recordedAt",
     "minTempC",
     "maxTempC",
@@ -271,6 +325,21 @@ export async function createReading(
         `Missing required field: ${field}`
       );
     }
+  }
+
+
+  const readingId =
+    normaliseUuidV1(
+      body.readingId
+    );
+
+
+  if (!readingId) {
+
+    throw new AppError(
+      400,
+      "readingId must be a valid UUIDv1"
+    );
   }
 
 
@@ -299,12 +368,26 @@ export async function createReading(
 
 
   if (
-    body.status !== undefined
+    typeof body.recordedBy !== "string" ||
+    body.recordedBy.trim() === ""
   ) {
 
     throw new AppError(
       400,
-      "status is calculated by the server and must not be supplied"
+      "recordedBy must be a non-empty string"
+    );
+  }
+
+
+  if (
+    body.status !== undefined ||
+    body.alertRaisedAt !== undefined ||
+    body.readingKey !== undefined
+  ) {
+
+    throw new AppError(
+      400,
+      "Server-managed fields must not be supplied"
     );
   }
 
@@ -336,22 +419,6 @@ export async function createReading(
   }
 
 
-  const existing =
-    await findReadingByTimestamp(
-      branchId,
-      recordedAt
-    );
-
-
-  if (existing) {
-
-    throw new AppError(
-      409,
-      "A reading already exists for this branch and timestamp"
-    );
-  }
-
-
   const status =
     getReadingStatus(
       body.minTempC,
@@ -359,21 +426,11 @@ export async function createReading(
     );
 
 
-  const readingId =
-    randomUUID();
-
-
-  const readingKey =
-    `${recordedAt}#${readingId}`;
-
-
   const item = {
 
-    branchId,
-
-    readingKey,
-
     readingId,
+
+    branchId,
 
     recordedAt,
 
@@ -384,13 +441,34 @@ export async function createReading(
       body.maxTempC,
 
     recordedBy:
-      body.recordedBy,
+      body.recordedBy.trim(),
 
     status
   };
 
 
-  await saveReading(item);
+  try {
+
+    await saveReading(
+      item
+    );
+
+  } catch (error) {
+
+    if (
+      error.name ===
+      "ConditionalCheckFailedException"
+    ) {
+
+      throw new AppError(
+        409,
+        "A reading already exists with this readingId"
+      );
+    }
+
+
+    throw error;
+  }
 
 
   console.log(
@@ -398,14 +476,11 @@ export async function createReading(
     {
       branchId,
       readingId,
+      recordedAt,
       status
     }
   );
 
-
-  // ==================================================
-  // PUBLISH EXCURSION EVENT
-  // ==================================================
 
   if (
     status === "excursion"
@@ -414,8 +489,6 @@ export async function createReading(
     await publishExcursion({
 
       branchId,
-
-      readingKey,
 
       readingId,
 
@@ -442,4 +515,291 @@ export async function createReading(
 
 
   return item;
+}
+
+
+// ======================================================
+// PATCH READING
+// ======================================================
+
+export async function patchReading(
+  branchId,
+  readingIdValue,
+  body
+) {
+
+  validateBodyObject(body);
+
+
+  const readingId =
+    normaliseUuidV1(
+      readingIdValue
+    );
+
+
+  if (!readingId) {
+
+    throw new AppError(
+      400,
+      "readingId must be a valid UUIDv1"
+    );
+  }
+
+
+  const suppliedFields =
+    Object.keys(body);
+
+
+  if (
+    suppliedFields.length === 0
+  ) {
+
+    throw new AppError(
+      400,
+      "At least one field must be supplied"
+    );
+  }
+
+
+  const allowedFields =
+    new Set([
+      "minTempC",
+      "maxTempC",
+      "recordedBy"
+    ]);
+
+
+  for (
+    const field of suppliedFields
+  ) {
+
+    if (
+      !allowedFields.has(field)
+    ) {
+
+      throw new AppError(
+        400,
+        `Field cannot be updated: ${field}`
+      );
+    }
+  }
+
+
+  const existing =
+    await findReadingById(
+      readingId
+    );
+
+
+  if (
+    !existing ||
+    existing.branchId !== branchId
+  ) {
+
+    throw new AppError(
+      404,
+      "Reading not found"
+    );
+  }
+
+
+  const minTempC =
+    body.minTempC !== undefined
+      ? body.minTempC
+      : existing.minTempC;
+
+
+  const maxTempC =
+    body.maxTempC !== undefined
+      ? body.maxTempC
+      : existing.maxTempC;
+
+
+  const recordedBy =
+    body.recordedBy !== undefined
+      ? body.recordedBy
+      : existing.recordedBy;
+
+
+  if (
+    !Number.isFinite(minTempC) ||
+    !Number.isFinite(maxTempC)
+  ) {
+
+    throw new AppError(
+      400,
+      "minTempC and maxTempC must be numbers"
+    );
+  }
+
+
+  if (
+    maxTempC <
+    minTempC
+  ) {
+
+    throw new AppError(
+      400,
+      "maxTempC must be greater than or equal to minTempC"
+    );
+  }
+
+
+  if (
+    typeof recordedBy !== "string" ||
+    recordedBy.trim() === ""
+  ) {
+
+    throw new AppError(
+      400,
+      "recordedBy must be a non-empty string"
+    );
+  }
+
+
+  const status =
+    getReadingStatus(
+      minTempC,
+      maxTempC
+    );
+
+
+  let updatedReading;
+
+
+  try {
+
+    updatedReading =
+      await updateReading({
+
+        readingId,
+
+        minTempC,
+
+        maxTempC,
+
+        recordedBy:
+          recordedBy.trim(),
+
+        status
+      });
+
+  } catch (error) {
+
+    if (
+      error.name ===
+      "ConditionalCheckFailedException"
+    ) {
+
+      throw new AppError(
+        404,
+        "Reading not found"
+      );
+    }
+
+
+    throw error;
+  }
+
+
+  if (
+    existing.status !== "excursion" &&
+    status === "excursion"
+  ) {
+
+    await publishExcursion({
+
+      branchId,
+
+      readingId,
+
+      recordedAt:
+        existing.recordedAt,
+
+      minTempC,
+
+      maxTempC,
+
+      status
+    });
+  }
+
+
+  return updatedReading;
+}
+
+
+// ======================================================
+// DELETE READING
+// ======================================================
+
+export async function deleteReading(
+  branchId,
+  readingIdValue
+) {
+
+  const readingId =
+    normaliseUuidV1(
+      readingIdValue
+    );
+
+
+  if (!readingId) {
+
+    throw new AppError(
+      400,
+      "readingId must be a valid UUIDv1"
+    );
+  }
+
+
+  const existing =
+    await findReadingById(
+      readingId
+    );
+
+
+  if (
+    !existing ||
+    existing.branchId !== branchId
+  ) {
+
+    throw new AppError(
+      404,
+      "Reading not found"
+    );
+  }
+
+
+  try {
+
+    await deleteReadingFromDatabase(
+      readingId
+    );
+
+  } catch (error) {
+
+    if (
+      error.name ===
+      "ConditionalCheckFailedException"
+    ) {
+
+      throw new AppError(
+        404,
+        "Reading not found"
+      );
+    }
+
+
+    throw error;
+  }
+
+
+  console.log(
+    "Reading deleted",
+    {
+      branchId,
+      readingId
+    }
+  );
 }

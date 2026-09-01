@@ -1,157 +1,257 @@
 # ======================================================
-# HTTP API
+# REST API GATEWAY (V1)
 # ======================================================
 
-resource "aws_apigatewayv2_api" "coldchain" {
-
-  name =
-    var.api_name
-
-
-  protocol_type =
-    "HTTP"
+resource "aws_api_gateway_rest_api" "coldchain" {
+  name           = var.api_name
+  description    = "Terraform cold-chain REST API"
+  api_key_source = "HEADER"
 }
 
 
 # ======================================================
-# LAMBDA INTEGRATION
+# TELL TERRAFORM THAT THE OLD TIMESTAMP RESOURCE
+# HAS BEEN RENAMED TO READING ID
 # ======================================================
 
-resource "aws_apigatewayv2_integration" "link_dynamodb" {
-
-  api_id =
-    aws_apigatewayv2_api
-      .coldchain
-      .id
+moved {
+  from = aws_api_gateway_resource.reading_by_timestamp
+  to   = aws_api_gateway_resource.reading_by_id
+}
 
 
-  integration_type =
-    "AWS_PROXY"
+# ======================================================
+# /branches
+# ======================================================
+
+resource "aws_api_gateway_resource" "branches" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  parent_id   = aws_api_gateway_rest_api.coldchain.root_resource_id
+  path_part   = "branches"
+}
 
 
-  integration_method =
-    "POST"
+# ======================================================
+# /branches/{branchId}
+# ======================================================
+
+resource "aws_api_gateway_resource" "branch" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  parent_id   = aws_api_gateway_resource.branches.id
+  path_part   = "{branchId}"
+}
 
 
-  integration_uri =
-    aws_lambda_function
-      .link_dynamodb
-      .invoke_arn
+# ======================================================
+# /branches/{branchId}/readings
+# ======================================================
+
+resource "aws_api_gateway_resource" "readings" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  parent_id   = aws_api_gateway_resource.branch.id
+  path_part   = "readings"
+}
 
 
-  payload_format_version =
-    "2.0"
+# ======================================================
+# /branches/{branchId}/readings/{readingId}
+# ======================================================
+
+resource "aws_api_gateway_resource" "reading_by_id" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  parent_id   = aws_api_gateway_resource.readings.id
+  path_part   = "{readingId}"
 }
 
 
 # ======================================================
 # GET ALL READINGS
+# GET /branches/{branchId}/readings
 # ======================================================
 
-resource "aws_apigatewayv2_route" "get_readings" {
+resource "aws_api_gateway_method" "get_readings" {
+  rest_api_id      = aws_api_gateway_rest_api.coldchain.id
+  resource_id      = aws_api_gateway_resource.readings.id
+  http_method      = "GET"
+  authorization    = "NONE"
+  api_key_required = true
+}
 
-  api_id =
-    aws_apigatewayv2_api
-      .coldchain
-      .id
+resource "aws_api_gateway_integration" "get_readings" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  resource_id = aws_api_gateway_resource.readings.id
+  http_method = aws_api_gateway_method.get_readings.http_method
 
-
-  route_key =
-    "GET /branches/{branchId}/readings"
-
-
-  target =
-    "integrations/${aws_apigatewayv2_integration.link_dynamodb.id}"
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.link_dynamodb.invoke_arn
 }
 
 
 # ======================================================
-# POST READING
+# POST NEW READING
+# POST /branches/{branchId}/readings
 # ======================================================
 
-resource "aws_apigatewayv2_route" "post_reading" {
+resource "aws_api_gateway_method" "post_reading" {
+  rest_api_id      = aws_api_gateway_rest_api.coldchain.id
+  resource_id      = aws_api_gateway_resource.readings.id
+  http_method      = "POST"
+  authorization    = "NONE"
+  api_key_required = true
+}
 
-  api_id =
-    aws_apigatewayv2_api
-      .coldchain
-      .id
+resource "aws_api_gateway_integration" "post_reading" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  resource_id = aws_api_gateway_resource.readings.id
+  http_method = aws_api_gateway_method.post_reading.http_method
 
-
-  route_key =
-    "POST /branches/{branchId}/readings"
-
-
-  target =
-    "integrations/${aws_apigatewayv2_integration.link_dynamodb.id}"
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.link_dynamodb.invoke_arn
 }
 
 
 # ======================================================
 # GET ONE READING
+# GET /branches/{branchId}/readings/{readingId}
 # ======================================================
 
-resource "aws_apigatewayv2_route" "get_one_reading" {
+resource "aws_api_gateway_method" "get_one_reading" {
+  rest_api_id      = aws_api_gateway_rest_api.coldchain.id
+  resource_id      = aws_api_gateway_resource.reading_by_id.id
+  http_method      = "GET"
+  authorization    = "NONE"
+  api_key_required = true
+}
 
-  api_id =
-    aws_apigatewayv2_api
-      .coldchain
-      .id
+resource "aws_api_gateway_integration" "get_one_reading" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  resource_id = aws_api_gateway_resource.reading_by_id.id
+  http_method = aws_api_gateway_method.get_one_reading.http_method
 
-
-  route_key =
-    "GET /branches/{branchId}/readings/{recordedAt}"
-
-
-  target =
-    "integrations/${aws_apigatewayv2_integration.link_dynamodb.id}"
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.link_dynamodb.invoke_arn
 }
 
 
 # ======================================================
-# DEFAULT STAGE
+# PATCH READING
+# PATCH /branches/{branchId}/readings/{readingId}
 # ======================================================
 
-resource "aws_apigatewayv2_stage" "default" {
+resource "aws_api_gateway_method" "patch_reading" {
+  rest_api_id      = aws_api_gateway_rest_api.coldchain.id
+  resource_id      = aws_api_gateway_resource.reading_by_id.id
+  http_method      = "PATCH"
+  authorization    = "NONE"
+  api_key_required = true
+}
 
-  api_id =
-    aws_apigatewayv2_api
-      .coldchain
-      .id
+resource "aws_api_gateway_integration" "patch_reading" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  resource_id = aws_api_gateway_resource.reading_by_id.id
+  http_method = aws_api_gateway_method.patch_reading.http_method
 
-
-  name =
-    "$default"
-
-
-  auto_deploy =
-    true
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.link_dynamodb.invoke_arn
 }
 
 
 # ======================================================
-# ALLOW API GATEWAY TO CALL LAMBDA
+# DELETE READING
+# DELETE /branches/{branchId}/readings/{readingId}
+# ======================================================
+
+resource "aws_api_gateway_method" "delete_reading" {
+  rest_api_id      = aws_api_gateway_rest_api.coldchain.id
+  resource_id      = aws_api_gateway_resource.reading_by_id.id
+  http_method      = "DELETE"
+  authorization    = "NONE"
+  api_key_required = true
+}
+
+resource "aws_api_gateway_integration" "delete_reading" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+  resource_id = aws_api_gateway_resource.reading_by_id.id
+  http_method = aws_api_gateway_method.delete_reading.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.link_dynamodb.invoke_arn
+}
+
+
+# ======================================================
+# API DEPLOYMENT
+# ======================================================
+
+resource "aws_api_gateway_deployment" "coldchain" {
+  rest_api_id = aws_api_gateway_rest_api.coldchain.id
+
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.branches.id,
+      aws_api_gateway_resource.branch.id,
+      aws_api_gateway_resource.readings.id,
+      aws_api_gateway_resource.reading_by_id.id,
+
+      aws_api_gateway_method.get_readings.id,
+      aws_api_gateway_method.post_reading.id,
+      aws_api_gateway_method.get_one_reading.id,
+      aws_api_gateway_method.patch_reading.id,
+      aws_api_gateway_method.delete_reading.id,
+
+      aws_api_gateway_method.get_readings.api_key_required,
+      aws_api_gateway_method.post_reading.api_key_required,
+      aws_api_gateway_method.get_one_reading.api_key_required,
+      aws_api_gateway_method.patch_reading.api_key_required,
+      aws_api_gateway_method.delete_reading.api_key_required,
+
+      aws_api_gateway_integration.get_readings.id,
+      aws_api_gateway_integration.post_reading.id,
+      aws_api_gateway_integration.get_one_reading.id,
+      aws_api_gateway_integration.patch_reading.id,
+      aws_api_gateway_integration.delete_reading.id
+    ]))
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  depends_on = [
+    aws_api_gateway_integration.get_readings,
+    aws_api_gateway_integration.post_reading,
+    aws_api_gateway_integration.get_one_reading,
+    aws_api_gateway_integration.patch_reading,
+    aws_api_gateway_integration.delete_reading
+  ]
+}
+
+
+# ======================================================
+# DEV STAGE
+# ======================================================
+
+resource "aws_api_gateway_stage" "dev" {
+  deployment_id = aws_api_gateway_deployment.coldchain.id
+  rest_api_id   = aws_api_gateway_rest_api.coldchain.id
+  stage_name    = var.api_stage_name
+}
+
+
+# ======================================================
+# ALLOW API GATEWAY TO INVOKE LAMBDA
 # ======================================================
 
 resource "aws_lambda_permission" "allow_api_gateway" {
+  statement_id  = "AllowRESTAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.link_dynamodb.function_name
+  principal     = "apigateway.amazonaws.com"
 
-  statement_id =
-    "AllowAPIGatewayInvoke"
-
-
-  action =
-    "lambda:InvokeFunction"
-
-
-  function_name =
-    aws_lambda_function
-      .link_dynamodb
-      .function_name
-
-
-  principal =
-    "apigateway.amazonaws.com"
-
-
-  source_arn =
-    "${aws_apigatewayv2_api.coldchain.execution_arn}/*/*"
+  source_arn = "${aws_api_gateway_rest_api.coldchain.execution_arn}/*/*"
 }

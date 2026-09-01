@@ -35,11 +35,11 @@ export async function processExcursion(
 
   if (
     !message.branchId ||
-    !message.readingKey
+    !message.readingId
   ) {
 
     throw new Error(
-      "Excursion message is missing branchId or readingKey"
+      "Excursion message is missing branchId or readingId"
     );
   }
 
@@ -60,11 +60,12 @@ export async function processExcursion(
 
 
   return setAlertRaisedAt({
+
+    readingId:
+      message.readingId,
+
     branchId:
       message.branchId,
-
-    readingKey:
-      message.readingKey,
 
     alertRaisedAt
   });

@@ -34,8 +34,8 @@ const dynamo =
 // ======================================================
 
 export async function setAlertRaisedAt({
+  readingId,
   branchId,
-  readingKey,
   alertRaisedAt
 }) {
 
@@ -49,19 +49,19 @@ export async function setAlertRaisedAt({
             TABLE_NAME,
 
           Key: {
-
-            branchId,
-
-            readingKey
+            readingId
           },
 
           UpdateExpression:
             "SET alertRaisedAt = :alertRaisedAt",
 
           ConditionExpression:
-            "attribute_exists(branchId) AND attribute_exists(readingKey) AND attribute_not_exists(alertRaisedAt)",
+            "attribute_exists(readingId) AND branchId = :branchId AND attribute_not_exists(alertRaisedAt)",
 
           ExpressionAttributeValues: {
+
+            ":branchId":
+              branchId,
 
             ":alertRaisedAt":
               alertRaisedAt
@@ -95,9 +95,6 @@ export async function setAlertRaisedAt({
     }
 
 
-    // Check whether this was genuinely
-    // a duplicate message.
-
     const current =
       await dynamo.send(
         new GetCommand({
@@ -106,18 +103,16 @@ export async function setAlertRaisedAt({
             TABLE_NAME,
 
           Key: {
-
-            branchId,
-
-            readingKey
+            readingId
           }
         })
       );
 
 
     if (
-      current.Item
-        ?.alertRaisedAt
+      current.Item &&
+      current.Item.branchId === branchId &&
+      current.Item.alertRaisedAt
     ) {
 
       return {
@@ -130,9 +125,6 @@ export async function setAlertRaisedAt({
       };
     }
 
-
-    // Item did not exist or another unexpected
-    // condition occurred. Let SQS retry it.
 
     throw error;
   }

@@ -1,17 +1,27 @@
 import {
   AppError,
   createReading,
+  deleteReading,
   getBranchReadings,
-  getReadingByTimestamp
+  getReadingById,
+  patchReading
 } from "../services/readingsService.mjs";
 
 
-function response(statusCode, body) {
+function response(statusCode, body = null) {
+
+  if (statusCode === 204) {
+    return {
+      statusCode: 204,
+      body: ""
+    };
+  }
+
   return {
     statusCode,
 
     headers: {
-      "content-type": "application/json"
+      "Content-Type": "application/json"
     },
 
     body: JSON.stringify(body)
@@ -19,138 +29,224 @@ function response(statusCode, body) {
 }
 
 
-export async function handleRequest(event, context) {
+function parseBody(event) {
 
-  console.log("API request received", {
-    requestId: context.awsRequestId,
-    routeKey: event.routeKey,
-    pathParameters: event.pathParameters,
-    queryParameters: event.queryStringParameters
-  });
+  try {
+
+    return JSON.parse(
+      event.body ?? "{}"
+    );
+
+  } catch {
+
+    throw new AppError(
+      400,
+      "Request body must be valid JSON"
+    );
+  }
+}
+
+
+export async function handleRequest(
+  event,
+  context
+) {
+
+  console.log(
+    "REST API request received",
+    {
+      requestId:
+        context.awsRequestId,
+
+      httpMethod:
+        event.httpMethod,
+
+      resource:
+        event.resource,
+
+      path:
+        event.path,
+
+      pathParameters:
+        event.pathParameters,
+
+      queryParameters:
+        event.queryStringParameters
+    }
+  );
 
 
   try {
 
-    const route = event.routeKey;
+    const httpMethod =
+      event.httpMethod;
+
+
+    const resource =
+      event.resource;
+
+
+    const route =
+      `${httpMethod} ${resource}`;
+
 
     const branchId =
       event.pathParameters?.branchId;
 
 
-    // ==================================================
-    // GET ALL READINGS FOR A BRANCH
-    // ==================================================
-
-    if (
-      route ===
-      "GET /branches/{branchId}/readings"
-    ) {
-
-      const from =
-        event.queryStringParameters?.from;
-
-      const to =
-        event.queryStringParameters?.to;
+    const readingId =
+      event.pathParameters?.readingId;
 
 
-      const readings =
-        await getBranchReadings({
-          branchId,
-          from,
-          to
-        });
+    switch (route) {
 
 
-      return response(
-        200,
-        readings
-      );
-    }
+      // ==================================================
+      // GET ALL READINGS
+      // ==================================================
+
+      case "GET /branches/{branchId}/readings": {
+
+        const from =
+          event.queryStringParameters?.from;
 
 
-    // ==================================================
-    // GET ONE READING
-    // ==================================================
-
-    if (
-      route ===
-      "GET /branches/{branchId}/readings/{recordedAt}"
-    ) {
-
-      const recordedAt =
-        event.pathParameters?.recordedAt;
+        const to =
+          event.queryStringParameters?.to;
 
 
-      const reading =
-        await getReadingByTimestamp(
-          branchId,
-          recordedAt
-        );
+        const readings =
+          await getBranchReadings({
+            branchId,
+            from,
+            to
+          });
 
 
-      return response(
-        200,
-        reading
-      );
-    }
-
-
-    // ==================================================
-    // CREATE READING
-    // ==================================================
-
-    if (
-      route ===
-      "POST /branches/{branchId}/readings"
-    ) {
-
-      let body;
-
-
-      try {
-
-        body =
-          JSON.parse(
-            event.body ?? "{}"
-          );
-
-      } catch {
-
-        throw new AppError(
-          400,
-          "Request body must be valid JSON"
+        return response(
+          200,
+          readings
         );
       }
 
 
-      const reading =
-        await createReading(
+      // ==================================================
+      // GET ONE READING BY readingId
+      // ==================================================
+
+      case "GET /branches/{branchId}/readings/{readingId}": {
+
+        const reading =
+          await getReadingById(
+            branchId,
+            readingId
+          );
+
+
+        return response(
+          200,
+          reading
+        );
+      }
+
+
+      // ==================================================
+      // CREATE READING
+      // ==================================================
+
+      case "POST /branches/{branchId}/readings": {
+
+        const body =
+          parseBody(event);
+
+
+        const reading =
+          await createReading(
+            branchId,
+            body
+          );
+
+
+        return response(
+          201,
+          reading
+        );
+      }
+
+
+      // ==================================================
+      // PATCH READING
+      // ==================================================
+
+      case "PATCH /branches/{branchId}/readings/{readingId}": {
+
+        const body =
+          parseBody(event);
+
+
+        const updatedReading =
+          await patchReading(
+            branchId,
+            readingId,
+            body
+          );
+
+
+        return response(
+          200,
+          updatedReading
+        );
+      }
+
+
+      // ==================================================
+      // DELETE READING
+      // ==================================================
+
+      case "DELETE /branches/{branchId}/readings/{readingId}": {
+
+        await deleteReading(
           branchId,
-          body
+          readingId
         );
 
 
-      return response(
-        201,
-        reading
-      );
+        return response(204);
+      }
+
+
+      // ==================================================
+      // UNKNOWN ROUTE
+      // ==================================================
+
+      default: {
+
+        return response(
+          404,
+          {
+            error:
+              "Route not found"
+          }
+        );
+      }
     }
-
-
-    return response(404, {
-      error: "Route not found"
-    });
 
 
   } catch (error) {
 
-    if (error instanceof AppError) {
+
+    if (
+      error instanceof AppError
+    ) {
 
       console.warn(
         "Request rejected",
         {
-          statusCode: error.statusCode,
-          message: error.message
+          statusCode:
+            error.statusCode,
+
+          message:
+            error.message
         }
       );
 
@@ -158,7 +254,8 @@ export async function handleRequest(event, context) {
       return response(
         error.statusCode,
         {
-          error: error.message
+          error:
+            error.message
         }
       );
     }

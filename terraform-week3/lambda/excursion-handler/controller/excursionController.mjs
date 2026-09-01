@@ -71,46 +71,85 @@ export async function handleExcursionBatch(
       );
 
 
-    if (
-      result.status ===
-      "duplicate"
-    ) {
+    switch (result.status) {
 
-      console.log(
-        "Duplicate message ignored - alert already raised",
-        {
-          branchId:
-            message.branchId,
+      // ==================================================
+      // DUPLICATE MESSAGE
+      // ==================================================
 
-          readingId:
-            message.readingId,
+      case "duplicate": {
 
-          alertRaisedAt:
-            result.alertRaisedAt
-        }
-      );
+        console.log(
+          "Duplicate message ignored - alert already raised",
+          {
+            branchId:
+              message.branchId,
+
+            readingId:
+              message.readingId,
+
+            alertRaisedAt:
+              result.alertRaisedAt
+          }
+        );
 
 
-      continue;
-    }
-
-
-    console.log(
-      "ALERT RAISED",
-      {
-        branchId:
-          message.branchId,
-
-        readingId:
-          message.readingId,
-
-        recordedAt:
-          message.recordedAt,
-
-        alertRaisedAt:
-          result.alertRaisedAt
+        break;
       }
-    );
+
+
+      // ==================================================
+      // ALERT SUCCESSFULLY RAISED
+      // ==================================================
+
+      case "raised": {
+
+        console.log(
+          "ALERT RAISED",
+          {
+            branchId:
+              message.branchId,
+
+            readingId:
+              message.readingId,
+
+            recordedAt:
+              message.recordedAt,
+
+            alertRaisedAt:
+              result.alertRaisedAt
+          }
+        );
+
+
+        break;
+      }
+
+
+      // ==================================================
+      // UNEXPECTED RESULT
+      // ==================================================
+
+      default: {
+
+        console.warn(
+          "Unexpected excursion result",
+          {
+            branchId:
+              message.branchId,
+
+            readingId:
+              message.readingId,
+
+            resultStatus:
+              result.status
+          }
+        );
+
+
+        break;
+      }
+    }
   }
 
 

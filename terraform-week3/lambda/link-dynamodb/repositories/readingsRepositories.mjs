@@ -3,14 +3,17 @@ import {
 } from "@aws-sdk/client-dynamodb";
 
 import {
+  DeleteCommand,
   DynamoDBDocumentClient,
+  GetCommand,
   PutCommand,
-  QueryCommand
+  QueryCommand,
+  UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 
 import {
-  SNSClient,
-  PublishCommand
+  PublishCommand,
+  SNSClient
 } from "@aws-sdk/client-sns";
 
 
@@ -22,12 +25,16 @@ const TABLE_NAME =
   process.env.TABLE_NAME;
 
 
+const BRANCH_RECORDED_AT_INDEX =
+  process.env.BRANCH_RECORDED_AT_INDEX;
+
+
 const EXCURSION_TOPIC_ARN =
   process.env.EXCURSION_TOPIC_ARN;
 
 
 // ======================================================
-// DYNAMODB CLIENT
+// DYNAMODB
 // ======================================================
 
 const dynamoClient =
@@ -43,7 +50,7 @@ const dynamo =
 
 
 // ======================================================
-// SNS CLIENT
+// SNS
 // ======================================================
 
 const sns =
@@ -53,39 +60,28 @@ const sns =
 
 
 // ======================================================
-// FIND ONE READING
+// FIND ONE READING BY UNIQUE readingId
 // ======================================================
 
-export async function findReadingByTimestamp(
-  branchId,
-  recordedAt
+export async function findReadingById(
+  readingId
 ) {
 
   const result =
     await dynamo.send(
-      new QueryCommand({
+      new GetCommand({
 
         TableName:
           TABLE_NAME,
 
-        KeyConditionExpression:
-          "branchId = :branchId AND begins_with(readingKey, :recordedAt)",
-
-        ExpressionAttributeValues: {
-
-          ":branchId":
-            branchId,
-
-          ":recordedAt":
-            `${recordedAt}#`
-        },
-
-        Limit: 1
+        Key: {
+          readingId
+        }
       })
     );
 
 
-  return result.Items?.[0];
+  return result.Item;
 }
 
 
@@ -104,9 +100,7 @@ export async function queryBranchReadings({
 
 
   const values = {
-
-    ":branchId":
-      branchId
+    ":branchId": branchId
   };
 
 
@@ -116,37 +110,37 @@ export async function queryBranchReadings({
   ) {
 
     keyCondition +=
-      " AND readingKey BETWEEN :from AND :to";
+      " AND recordedAt BETWEEN :from AND :to";
 
 
     values[":from"] =
-      `${from}#`;
+      from;
 
 
     values[":to"] =
-      `${to}#\uffff`;
+      to;
   }
 
 
   else if (from) {
 
     keyCondition +=
-      " AND readingKey >= :from";
+      " AND recordedAt >= :from";
 
 
     values[":from"] =
-      `${from}#`;
+      from;
   }
 
 
   else if (to) {
 
     keyCondition +=
-      " AND readingKey <= :to";
+      " AND recordedAt <= :to";
 
 
     values[":to"] =
-      `${to}#\uffff`;
+      to;
   }
 
 
@@ -156,6 +150,9 @@ export async function queryBranchReadings({
 
         TableName:
           TABLE_NAME,
+
+        IndexName:
+          BRANCH_RECORDED_AT_INDEX,
 
         KeyConditionExpression:
           keyCondition,
@@ -175,6 +172,8 @@ export async function queryBranchReadings({
 
 // ======================================================
 // SAVE READING
+//
+// This condition makes readingId unique atomically.
 // ======================================================
 
 export async function saveReading(
@@ -188,9 +187,113 @@ export async function saveReading(
         TABLE_NAME,
 
       Item:
-        item
+        item,
+
+      ConditionExpression:
+        "attribute_not_exists(readingId)"
     })
   );
+}
+
+
+// ======================================================
+// UPDATE READING
+// ======================================================
+
+export async function updateReading({
+  readingId,
+  minTempC,
+  maxTempC,
+  recordedBy,
+  status
+}) {
+
+  const result =
+    await dynamo.send(
+      new UpdateCommand({
+
+        TableName:
+          TABLE_NAME,
+
+        Key: {
+          readingId
+        },
+
+        UpdateExpression:
+          "SET #minTempC = :minTempC, #maxTempC = :maxTempC, #recordedBy = :recordedBy, #status = :status",
+
+        ConditionExpression:
+          "attribute_exists(readingId)",
+
+        ExpressionAttributeNames: {
+
+          "#minTempC":
+            "minTempC",
+
+          "#maxTempC":
+            "maxTempC",
+
+          "#recordedBy":
+            "recordedBy",
+
+          "#status":
+            "status"
+        },
+
+        ExpressionAttributeValues: {
+
+          ":minTempC":
+            minTempC,
+
+          ":maxTempC":
+            maxTempC,
+
+          ":recordedBy":
+            recordedBy,
+
+          ":status":
+            status
+        },
+
+        ReturnValues:
+          "ALL_NEW"
+      })
+    );
+
+
+  return result.Attributes;
+}
+
+
+// ======================================================
+// DELETE READING
+// ======================================================
+
+export async function deleteReadingFromDatabase(
+  readingId
+) {
+
+  const result =
+    await dynamo.send(
+      new DeleteCommand({
+
+        TableName:
+          TABLE_NAME,
+
+        Key: {
+          readingId
+        },
+
+        ConditionExpression:
+          "attribute_exists(readingId)",
+
+        ReturnValues:
+          "ALL_OLD"
+      })
+    );
+
+
+  return result.Attributes;
 }
 
 

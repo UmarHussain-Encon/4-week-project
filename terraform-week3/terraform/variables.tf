@@ -1,188 +1,163 @@
 variable "aws_region" {
-
-  description =
-    "AWS region used by the cold-chain project"
-
-  type =
-    string
-
-  default =
-    "eu-north-1"
+  description = "AWS region used by the cold-chain project"
+  type        = string
+  default     = "eu-north-1"
 }
 
+
+# ======================================================
+# DATABASE
+# ======================================================
 
 variable "dynamodb_table_name" {
-
-  description =
-    "Terraform-managed cold-chain DynamoDB table"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-database-terraform"
+  description = "Original Terraform DynamoDB table kept for project history"
+  type        = string
+  default     = "umar-coldchain-database-terraform"
 }
 
 
+variable "dynamodb_readings_table_name" {
+  description = "New readingId-based DynamoDB table"
+  type        = string
+  default     = "umar-coldchain-readings-terraform"
+}
+
+
+variable "readings_gsi_name" {
+  description = "Index used to query readings by branch and recordedAt"
+  type        = string
+  default     = "branch-recordedAt-index"
+}
+
+
+# ======================================================
+# MAIN LAMBDA
+# ======================================================
+
 variable "link_dynamodb_lambda_name" {
-
-  description =
-    "Main API Lambda function"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-LinkDynamoDB-terraform"
+  description = "Main API Lambda function"
+  type        = string
+  default     = "umar-coldchain-LinkDynamoDB-terraform"
 }
 
 
 variable "link_dynamodb_role_name" {
-
-  description =
-    "IAM role for the main API Lambda"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-LinkDynamoDB-role-terraform"
+  description = "IAM execution role for the main Lambda"
+  type        = string
+  default     = "umar-coldchain-LinkDynamoDB-role-terraform"
 }
 
 
+# ======================================================
+# EXCURSION LAMBDA
+# ======================================================
+
 variable "excursion_handler_lambda_name" {
-
-  description =
-    "Excursion processing Lambda function"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-excursion-handler-terraform"
+  description = "Excursion processing Lambda"
+  type        = string
+  default     = "umar-coldchain-excursion-handler-terraform"
 }
 
 
 variable "excursion_handler_role_name" {
-
-  description =
-    "IAM role for the excursion Lambda"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-excursion-handler-role-terraform"
+  description = "IAM execution role for the excursion Lambda"
+  type        = string
+  default     = "umar-coldchain-excursion-handler-role-terraform"
 }
 
+
+# ======================================================
+# API
+# ======================================================
 
 variable "api_name" {
-
-  description =
-    "HTTP API Gateway name"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-api-terraform"
+  description = "REST API Gateway name"
+  type        = string
+  default     = "umar-coldchain-api-terraform"
 }
 
 
+variable "api_stage_name" {
+  description = "REST API deployment stage"
+  type        = string
+  default     = "dev"
+}
+
+
+# ======================================================
+# SNS / SQS
+# ======================================================
+
 variable "sns_topic_name" {
-
-  description =
-    "SNS topic used for excursions"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-excursions-terraform"
+  description = "SNS excursion topic"
+  type        = string
+  default     = "umar-coldchain-excursions-terraform"
 }
 
 
 variable "sqs_queue_name" {
-
-  description =
-    "Main excursion SQS queue"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-alert-queue-terraform"
+  description = "Main excursion SQS queue"
+  type        = string
+  default     = "umar-coldchain-alert-queue-terraform"
 }
 
 
 variable "sqs_dlq_name" {
-
-  description =
-    "Excursion dead-letter queue"
-
-  type =
-    string
-
-  default =
-    "umar-coldchain-alert-dlq-terraform"
+  description = "Excursion dead-letter queue"
+  type        = string
+  default     = "umar-coldchain-alert-dlq-terraform"
 }
 
 
+# ======================================================
+# LAMBDA SETTINGS
+# ======================================================
+
 variable "lambda_runtime" {
-
-  type =
-    string
-
-  default =
-    "nodejs22.x"
+  description = "Node.js Lambda runtime"
+  type        = string
+  default     = "nodejs22.x"
 }
 
 
 variable "main_lambda_timeout" {
-
-  type =
-    number
-
-  default =
-    10
+  description = "Main API Lambda timeout"
+  type        = number
+  default     = 10
 }
 
 
 variable "excursion_lambda_timeout" {
-
-  type =
-    number
-
-  default =
-    5
+  description = "Excursion Lambda timeout"
+  type        = number
+  default     = 5
 }
 
 
+# ======================================================
+# SQS SETTINGS
+# ======================================================
+
 variable "sqs_visibility_timeout" {
-
-  type =
-    number
-
-  default =
-    30
+  description = "Main queue visibility timeout"
+  type        = number
+  default     = 30
 }
 
 
 variable "sqs_max_receive_count" {
-
-  type =
-    number
-
-  default =
-    3
+  description = "Failed receives before DLQ"
+  type        = number
+  default     = 3
 }
 
 
+# ======================================================
+# CLOUDWATCH
+# ======================================================
+
 variable "cloudwatch_retention_days" {
-
-  type =
-    number
-
-  default =
-    14
+  description = "CloudWatch log retention"
+  type        = number
+  default     = 14
 }
