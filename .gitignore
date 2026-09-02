@@ -19,3 +19,5 @@ crash.*.log
 .DS_Store
 
 .terraform.*
+
+node_modules/

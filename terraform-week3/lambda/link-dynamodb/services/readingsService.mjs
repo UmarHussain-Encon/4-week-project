@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   deleteReadingFromDatabase,
   findReadingById,
@@ -8,6 +10,10 @@ import {
 } from "../repositories/readingsRepositories.mjs";
 
 
+// ======================================================
+// APP ERROR
+// ======================================================
+
 export class AppError extends Error {
 
   constructor(
@@ -17,11 +23,8 @@ export class AppError extends Error {
 
     super(message);
 
-    this.name =
-      "AppError";
-
-    this.statusCode =
-      statusCode;
+    this.name = "AppError";
+    this.statusCode = statusCode;
   }
 }
 
@@ -47,10 +50,13 @@ function validateBodyObject(body) {
 
 
 // ======================================================
-// UUID VERSION 1 VALIDATION
+// UUID VERSION 4 VALIDATION
+//
+// Used for GET one, PATCH and DELETE.
+// It does NOT create a UUID.
 // ======================================================
 
-function normaliseUuidV1(value) {
+function normaliseUuidV4(value) {
 
   if (
     typeof value !== "string"
@@ -66,12 +72,12 @@ function normaliseUuidV1(value) {
       .toLowerCase();
 
 
-  const uuidV1Pattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuidV4Pattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 
   if (
-    !uuidV1Pattern.test(
+    !uuidV4Pattern.test(
       readingId
     )
   ) {
@@ -91,6 +97,7 @@ function normaliseUuidV1(value) {
 function normaliseDate(value) {
 
   if (!value) {
+
     return null;
   }
 
@@ -101,7 +108,9 @@ function normaliseDate(value) {
   try {
 
     decodedValue =
-      decodeURIComponent(value);
+      decodeURIComponent(
+        value
+      );
 
   } catch {
 
@@ -111,11 +120,15 @@ function normaliseDate(value) {
 
 
   const timestamp =
-    Date.parse(decodedValue);
+    Date.parse(
+      decodedValue
+    );
 
 
   if (
-    Number.isNaN(timestamp)
+    Number.isNaN(
+      timestamp
+    )
   ) {
 
     return null;
@@ -192,7 +205,9 @@ export async function getBranchReadings({
   if (from) {
 
     normalisedFrom =
-      normaliseDate(from);
+      normaliseDate(
+        from
+      );
 
 
     if (!normalisedFrom) {
@@ -208,7 +223,9 @@ export async function getBranchReadings({
   if (to) {
 
     normalisedTo =
-      normaliseDate(to);
+      normaliseDate(
+        to
+      );
 
 
     if (!normalisedTo) {
@@ -253,7 +270,7 @@ export async function getReadingById(
 ) {
 
   const readingId =
-    normaliseUuidV1(
+    normaliseUuidV4(
       readingIdValue
     );
 
@@ -262,7 +279,7 @@ export async function getReadingById(
 
     throw new AppError(
       400,
-      "readingId must be a valid UUIDv1"
+      "readingId must be a valid UUIDv4"
     );
   }
 
@@ -298,11 +315,38 @@ export async function createReading(
   body
 ) {
 
-  validateBodyObject(body);
+  validateBodyObject(
+    body
+  );
+
+
+  if (!branchId) {
+
+    throw new AppError(
+      400,
+      "branchId is required"
+    );
+  }
+
+
+  // ==================================================
+  // CLIENT MUST NOT PROVIDE readingId
+  //
+  // The server automatically creates a UUIDv4.
+  // ==================================================
+
+  if (
+    body.readingId !== undefined
+  ) {
+
+    throw new AppError(
+      400,
+      "readingId is generated automatically and must not be supplied"
+    );
+  }
 
 
   const requiredFields = [
-    "readingId",
     "recordedAt",
     "minTempC",
     "maxTempC",
@@ -328,24 +372,34 @@ export async function createReading(
   }
 
 
-  const readingId =
-    normaliseUuidV1(
-      body.readingId
-    );
+  // ==================================================
+  // PREVENT SERVER-MANAGED FIELDS
+  // ==================================================
 
-
-  if (!readingId) {
+  if (
+    body.status !== undefined ||
+    body.alertRaisedAt !== undefined ||
+    body.branchId !== undefined
+  ) {
 
     throw new AppError(
       400,
-      "readingId must be a valid UUIDv1"
+      "Server-managed fields must not be supplied"
     );
   }
 
 
+  // ==================================================
+  // TEMPERATURE VALIDATION
+  // ==================================================
+
   if (
-    !Number.isFinite(body.minTempC) ||
-    !Number.isFinite(body.maxTempC)
+    !Number.isFinite(
+      body.minTempC
+    ) ||
+    !Number.isFinite(
+      body.maxTempC
+    )
   ) {
 
     throw new AppError(
@@ -367,6 +421,10 @@ export async function createReading(
   }
 
 
+  // ==================================================
+  // RECORDED BY VALIDATION
+  // ==================================================
+
   if (
     typeof body.recordedBy !== "string" ||
     body.recordedBy.trim() === ""
@@ -379,18 +437,9 @@ export async function createReading(
   }
 
 
-  if (
-    body.status !== undefined ||
-    body.alertRaisedAt !== undefined ||
-    body.readingKey !== undefined
-  ) {
-
-    throw new AppError(
-      400,
-      "Server-managed fields must not be supplied"
-    );
-  }
-
+  // ==================================================
+  // DATE VALIDATION
+  // ==================================================
 
   const recordedAt =
     normaliseDate(
@@ -408,7 +457,9 @@ export async function createReading(
 
 
   if (
-    new Date(recordedAt).getTime() >
+    new Date(
+      recordedAt
+    ).getTime() >
     Date.now()
   ) {
 
@@ -419,12 +470,30 @@ export async function createReading(
   }
 
 
+  // ==================================================
+  // CALCULATE READING STATUS
+  // ==================================================
+
   const status =
     getReadingStatus(
       body.minTempC,
       body.maxTempC
     );
 
+
+  // ==================================================
+  // GENERATE UUIDv4 AUTOMATICALLY
+  //
+  // randomUUID() generates UUID VERSION 4.
+  // ==================================================
+
+  const readingId =
+    randomUUID();
+
+
+  // ==================================================
+  // BUILD DYNAMODB ITEM
+  // ==================================================
 
   const item = {
 
@@ -446,6 +515,10 @@ export async function createReading(
     status
   };
 
+
+  // ==================================================
+  // SAVE READING
+  // ==================================================
 
   try {
 
@@ -481,6 +554,10 @@ export async function createReading(
     }
   );
 
+
+  // ==================================================
+  // PUBLISH EXCURSION
+  // ==================================================
 
   if (
     status === "excursion"
@@ -528,11 +605,13 @@ export async function patchReading(
   body
 ) {
 
-  validateBodyObject(body);
+  validateBodyObject(
+    body
+  );
 
 
   const readingId =
-    normaliseUuidV1(
+    normaliseUuidV4(
       readingIdValue
     );
 
@@ -541,13 +620,15 @@ export async function patchReading(
 
     throw new AppError(
       400,
-      "readingId must be a valid UUIDv1"
+      "readingId must be a valid UUIDv4"
     );
   }
 
 
   const suppliedFields =
-    Object.keys(body);
+    Object.keys(
+      body
+    );
 
 
   if (
@@ -560,6 +641,10 @@ export async function patchReading(
     );
   }
 
+
+  // ==================================================
+  // ONLY THESE FIELDS MAY BE PATCHED
+  // ==================================================
 
   const allowedFields =
     new Set([
@@ -574,7 +659,9 @@ export async function patchReading(
   ) {
 
     if (
-      !allowedFields.has(field)
+      !allowedFields.has(
+        field
+      )
     ) {
 
       throw new AppError(
@@ -621,9 +708,17 @@ export async function patchReading(
       : existing.recordedBy;
 
 
+  // ==================================================
+  // VALIDATE UPDATED VALUES
+  // ==================================================
+
   if (
-    !Number.isFinite(minTempC) ||
-    !Number.isFinite(maxTempC)
+    !Number.isFinite(
+      minTempC
+    ) ||
+    !Number.isFinite(
+      maxTempC
+    )
   ) {
 
     throw new AppError(
@@ -656,6 +751,10 @@ export async function patchReading(
     );
   }
 
+
+  // ==================================================
+  // RECALCULATE STATUS
+  // ==================================================
 
   const status =
     getReadingStatus(
@@ -702,6 +801,11 @@ export async function patchReading(
   }
 
 
+  // ==================================================
+  // IF READING BECAME AN EXCURSION,
+  // PUBLISH AN ALERT
+  // ==================================================
+
   if (
     existing.status !== "excursion" &&
     status === "excursion"
@@ -739,7 +843,7 @@ export async function deleteReading(
 ) {
 
   const readingId =
-    normaliseUuidV1(
+    normaliseUuidV4(
       readingIdValue
     );
 
@@ -748,7 +852,7 @@ export async function deleteReading(
 
     throw new AppError(
       400,
-      "readingId must be a valid UUIDv1"
+      "readingId must be a valid UUIDv4"
     );
   }
 

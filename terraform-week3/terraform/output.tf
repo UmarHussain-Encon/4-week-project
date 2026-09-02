@@ -16,11 +16,6 @@ output "dynamodb_table_name" {
 }
 
 
-output "legacy_dynamodb_table_name" {
-  description = "Previous Terraform DynamoDB table retained rather than deleted"
-  value       = aws_dynamodb_table.readings.name
-}
-
 output "link_dynamodb_lambda_name" {
   description = "Main Terraform Lambda"
   value       = aws_lambda_function.link_dynamodb.function_name

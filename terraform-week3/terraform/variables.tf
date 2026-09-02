@@ -9,12 +9,6 @@ variable "aws_region" {
 # DATABASE
 # ======================================================
 
-variable "dynamodb_table_name" {
-  description = "Original Terraform DynamoDB table kept for project history"
-  type        = string
-  default     = "umar-coldchain-database-terraform"
-}
-
 
 variable "dynamodb_readings_table_name" {
   description = "New readingId-based DynamoDB table"
