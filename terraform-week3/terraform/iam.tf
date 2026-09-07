@@ -76,7 +76,7 @@ resource "aws_iam_role_policy" "link_dynamodb_access" {
           "sns:Publish"
         ]
 
-        Resource = aws_sns_topic.excursions.arn
+        Resource = module.sns.topic_arn
       }
     ]
   })

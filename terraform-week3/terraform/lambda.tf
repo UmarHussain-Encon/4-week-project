@@ -57,7 +57,7 @@ resource "aws_lambda_function" "link_dynamodb" {
     variables = {
       TABLE_NAME               = aws_dynamodb_table.readings_by_id.name
       BRANCH_RECORDED_AT_INDEX = var.readings_gsi_name
-      EXCURSION_TOPIC_ARN      = aws_sns_topic.excursions.arn
+      EXCURSION_TOPIC_ARN      = module.sns.topic_arn
     }
   }
 

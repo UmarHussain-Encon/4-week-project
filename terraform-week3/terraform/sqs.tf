@@ -80,7 +80,7 @@ data "aws_iam_policy_document" "allow_sns_to_sqs" {
       variable = "aws:SourceArn"
 
       values = [
-        aws_sns_topic.excursions.arn
+        module.sns.topic_arn
       ]
     }
   }

@@ -38,7 +38,7 @@ output "excursion_handler_role_name" {
 
 output "sns_topic_arn" {
   description = "Excursion SNS topic ARN"
-  value       = aws_sns_topic.excursions.arn
+  value       = module.sns.topic_arn
 }
 
 output "sqs_queue_url" {
